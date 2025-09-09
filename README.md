@@ -14,3 +14,4 @@ Static landing page with a Telegram mini app mock.
 ## Deployment
 
 The repository includes a GitHub Actions workflow that publishes the site to GitHub Pages on every push to the `main` branch.
+The workflow leverages GitHub's built-in `GITHUB_TOKEN`, so no personal access token is required.
