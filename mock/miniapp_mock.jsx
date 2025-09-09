@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, Apple, Award, BarChart3, Bell, Camera, Check, ChevronRight, Flame, HeartPulse, Medal, Menu, Settings, Sparkles, Star, TimerReset, Trophy, Upload, User } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area, CartesianGrid } from "recharts";
+import React, { useEffect, useMemo, useRef, useState } from "https://esm.sh/react@18";
+import { Activity, Apple, Award, BarChart3, Bell, Camera, Check, ChevronRight, Flame, HeartPulse, Medal, Menu, Settings, Sparkles, Star, TimerReset, Trophy, Upload, User } from "https://esm.sh/lucide-react@0.378.0";
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area, CartesianGrid } from "https://esm.sh/recharts@2";
 // v0.0.1 m
 /**
  * Telegram Fitness & Nutrition Coach — Figma-like Mock
@@ -86,7 +86,7 @@ const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 function useTelegramTheme() {
   const [tgTheme, setTgTheme] = useState({ colorScheme: "light" });
   useEffect(() => {
-    const tg = (window as any)?.Telegram?.WebApp;
+    const tg = window?.Telegram?.WebApp;
     if (tg) {
       try {
         tg.ready?.();
