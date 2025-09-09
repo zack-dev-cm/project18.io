@@ -1,0 +1,275 @@
+Proposed Bot Architecture (Agentic & Modular)
+
+The goal is a next‑generation Telegram bot that functions as a fitness, nutrition and lifestyle coach. It should incorporate GPT‑5’s reasoning power, the Agents SDK for tool orchestration, Telegram’s Mini App capabilities, and modular microservices for maintainability. A high‑level architecture is illustrated below.
+
+flowchart TD
+    subgraph User & Interfaces
+        U[User on Telegram] -- messages/photos/voice --> TG(Telegram Bot API)
+        U -- mini‑app UI --> WebApp[Telegram Mini App]
+    end
+    TG -- webhook --> Backend
+    WebApp -- HTTPS/API --> Backend
+    subgraph Backend Services
+        Backend -->|Agentic request| Agent[Agent Runner (GPT‑5 via Agents SDK)]
+        Agent -->|function calls| Functions[Function Tool Router]
+        Functions -->|nutrition & image analysis| NutritionSvc[Nutrition Service]
+        Functions -->|workout plan & scheduling| WorkoutSvc[Workout Service]
+        Functions -->|goals & leaderboard| GoalSvc[Goal/Leaderboard Service]
+        Functions -->|advice & recommendations| AdviceSvc[Recommendation Engine]
+        Functions -->|calendar & wearables| IntegrationSvc[External API Integrations]
+    end
+    NutritionSvc <--->|DB queries| DB[(User & Activity Database)]
+    WorkoutSvc <---> DB
+    GoalSvc <---> DB
+    AdviceSvc <---> DB
+    IntegrationSvc -->|Calendar, wearable data, nutrition DB| ExternalAPIs
+
+    note over WebApp, TG: mini‑app uses DeviceStorage/SecureStorage:contentReference[oaicite:20]{index=20} to cache data offline.
+
+Core Components
+
+Telegram Interface (aiogram): Use an asynchronous library such as aiogram for handling messages, photos and commands. The legacy bot’s persistent menu and command structure can be retained but modularised.
+
+Mini App UI: Build a React/Vue/Next.js web‑app served by the backend and launched via the bot’s menu. Use the new DeviceStorage and SecureStorage fields to store workout schedules and sensitive health data locally on the user’s device
+core.telegram.org
+. The mini‑app can display calendars, leaderboards, charts and forms that exceed the chat UI’s capabilities.
+
+Agent Runner: Each complex request (e.g., “suggest a week‑long workout plan given my weight and schedule”) is sent to GPT‑5 through the Agents SDK. The agent is configured with available function tools representing business logic. MCP allows the agent to access remote tools (calendar API, wearable API) through a standard interface
+openai.github.io
+. Use the new reasoning_effort/verbosity parameters to control responses and custom tools for free‑form code or SQL when necessary
+openai.com
+datacamp.com
+.
+
+Function Tool Router: Implements the functions exposed to GPT‑5. Examples:
+
+get_nutrition_info(photo, description): returns calories and macros for a meal by using a food recognition model (e.g., existing nutrition_bot.py logic) and external nutrition databases.
+
+plan_workout(user_id, preferences, schedule): uses a library of exercises and heuristics or a separate ML model to assemble workouts tailored to user goals (strength, cardio, flexibility).
+
+log_activity(user_id, exercise, duration): records activity and updates calories burned using formulas or external services.
+
+recommend_meal_plan(user_id): generates a daily menu based on caloric needs and dietary restrictions, using GPT‑5.
+
+update_goal(user_id, metric, value): updates user goals (e.g., weight loss, calories burned) and triggers leaderboard updates.
+
+Domain Services: Separate microservices for nutrition, workouts, goals and recommendations. Each service encapsulates its database tables and business rules. For example, NutritionSvc may wrap image classification models (possibly using ONNX/TensorFlow), nutrient databases and caching. WorkoutSvc may interface with open datasets of exercises and compute estimated calories burned per exercise.
+
+Database & Storage: Use PostgreSQL or Firestore for central data (user profiles, activity logs, leaderboard). The Mini App uses DeviceStorage for caching schedule data offline and SecureStorage for storing tokens or health metrics on the device
+core.telegram.org
+.
+
+External Integrations: Provide connectors for calendar APIs (e.g., Google Calendar) to schedule workouts and send reminders, wearable APIs (Fitbit, Apple Health) to import steps and heart‑rate data, and nutrition databases (USDA or Edamam) for macro values. These can be exposed to GPT‑5 through MCP for dynamic tool invocation.
+
+Development Plan
+
+Project Setup & Infrastructure (Weeks 1‑2)
+
+Choose aiogram for Telegram integration due to its asynchronous design and robust feature set
+blog.finxter.com
+. Initialize a monorepo with separate packages for the bot interface, mini‑app and microservices.
+
+Configure continuous deployment (e.g., GitHub Actions + Cloud Run) and environment variables (Telegram token, OpenAI API key, database credentials).
+
+Establish a relational schema for users, meals, workouts, schedules and leaderboard entries.
+
+Port Legacy Features (Weeks 3‑4)
+
+Migrate the existing image and voice recognition logic from nutrition_bot.py into the NutritionSvc. Refactor synchronous code to asynchronous (using aiohttp/asyncio).
+
+Implement basic commands: /start, /help, /profile and meal logging. Provide persistent menu options to launch the mini‑app and log activities.
+
+Introduce GPT‑5 Agents (Weeks 5‑6)
+
+Define function schemas for core operations (nutrition lookup, workout planning, goal updates). Use the Agents SDK to register these tools and create an agent.
+
+Implement a simple agent loop that receives user prompts, calls GPT‑5 with reasoning_effort set appropriately, and invokes tools as directed by the model. Store session context in a session database using the SDK’s session management
+openai.github.io
+.
+
+Test with queries like “Plan a 3‑day workout for me” or “What should I eat tomorrow to reach 1500 kcal?” and verify tool calls.
+
+Build the Mini App (Weeks 7‑8)
+
+Create a web‑app using Next.js or another framework. Expose endpoints via the backend to serve the app through Telegram.
+
+Use the new DeviceStorage to cache workout schedules and user settings locally; use SecureStorage for tokens or sensitive metrics
+core.telegram.org
+.
+
+Provide interactive features: calendar views of workouts, progress charts, forms to update goals, and a leaderboard.
+
+Expand Services (Weeks 9‑12)
+
+Integrate external APIs (nutrition databases, calendar providers, wearables) through adapters. Expose them as MCP tools for the agent.
+
+Enhance WorkoutSvc with exercise classification, difficulty scaling and calorie estimation; build a library of exercises.
+
+Implement GoalSvc with gamification features: streaks, achievements and a leaderboard that compares friends.
+
+Add a recommendation engine that uses historical data and GPT‑5 to suggest adjustments to diet or exercise (e.g., emphasise rest days, propose more protein).
+
+Testing & Deployment (Weeks 13‑14)
+
+Write unit/integration tests for each service and agent interaction. Use OpenAI’s tracing to monitor tool calls and adjust guardrails.
+
+Conduct user testing, gather feedback and iteratively refine prompts, menu design and mini‑app UI.
+
+Deploy to production with autoscaling; monitor performance and fine‑tune reasoning_effort to balance cost and accuracy.
+
+Sample Code Skeleton (Python with aiogram & Agents SDK)
+
+Below is a simplified example of how the Telegram bot could route messages to GPT‑5 via the Agents SDK and handle function calls. This skeleton focuses on clarity rather than completeness. It illustrates asynchronous handlers, agent invocation with tool registration, and integration with domain services.
+
+import os
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
+from openai import OpenAI
+from openai.agent import Agent, FunctionTool
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+
+# --------------------- Domain functions ---------------------
+async def get_nutrition_info(photo_url: str, description: str | None = None) -> dict:
+    """Look up calories/macros for a meal.  Placeholder implementation."""
+    # In production, download the image, run image classification, query a nutrition DB
+    # For now, return dummy values
+    return {"calories": 350, "protein_g": 20, "fat_g": 10, "carbs_g": 45}
+
+
+async def plan_workout(user_id: int, goal: str = "general fitness", days: int = 3) -> dict:
+    """Create a basic workout plan.  Placeholder implementation."""
+    return {
+        "workout_plan": [
+            {"day": 1, "exercises": ["Squats", "Push‑ups", "Jumping jacks"]},
+            {"day": 2, "exercises": ["Lunges", "Plank", "Burpees"]},
+            {"day": 3, "exercises": ["Rest or light cardio"]},
+        ]
+    }
+
+
+async def update_goal(user_id: int, metric: str, value: float) -> dict:
+    """Update a user’s goal progress and return leaderboard info."""
+    # Simulate database update and leaderboard ranking
+    return {"message": f"Updated {metric} to {value}.", "leaderboard_rank": 5}
+
+
+# --------------------- Agent & tools setup ---------------------
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Define function tools for the agent
+nutrition_tool = FunctionTool(
+    name="get_nutrition_info",
+    description="Retrieve nutrition information for a meal from a photo or text description.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "photo_url": {"type": "string", "description": "URL of the meal photo"},
+            "description": {"type": "string", "description": "Optional text description", "default": None},
+        },
+        "required": ["photo_url"],
+    },
+    function=get_nutrition_info,
+)
+
+workout_tool = FunctionTool(
+    name="plan_workout",
+    description="Generate a personalized workout plan based on user goals and timeframe.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "integer"},
+            "goal": {"type": "string", "default": "general fitness"},
+            "days": {"type": "integer", "default": 3},
+        },
+        "required": ["user_id"],
+    },
+    function=plan_workout,
+)
+
+goal_tool = FunctionTool(
+    name="update_goal",
+    description="Update a user’s progress toward a goal and return leaderboard information.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "integer"},
+            "metric": {"type": "string"},
+            "value": {"type": "number"},
+        },
+        "required": ["user_id", "metric", "value"],
+    },
+    function=update_goal,
+)
+
+agent = Agent(
+    model="gpt-5",  # specify GPT‑5
+    tools=[nutrition_tool, workout_tool, goal_tool],
+    client=openai_client,
+    default_reasoning_effort=1.0,
+)
+
+
+# --------------------- Telegram handlers ---------------------
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(bot)
+
+
+@dp.message_handler(commands=["start"])
+async def handle_start(message: types.Message):
+    await message.answer(
+        "Welcome! I can help you track meals, plan workouts and reach your goals.\n"
+        "Send me a photo of your meal or ask me for a workout plan."
+    )
+
+
+@dp.message_handler(content_types=[types.ContentType.PHOTO])
+async def handle_photo(message: types.Message):
+    # Extract the highest resolution photo URL
+    photo = message.photo[-1]
+    file = await bot.get_file(photo.file_id)
+    photo_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
+
+    # Ask the agent to analyze the photo
+    prompt = "Provide nutrition information for the attached meal and suggest healthy adjustments."
+    response = await agent.acall(
+        prompt=prompt,
+        images=[photo_url],
+        # agent will call get_nutrition_info if needed
+    )
+    await message.answer(response)
+
+
+@dp.message_handler(commands=["workout"])
+async def handle_workout(message: types.Message):
+    user_id = message.from_user.id
+    prompt = f"Plan a 3‑day workout for user {user_id}."
+    response = await agent.acall(prompt=prompt)
+    await message.answer(response)
+
+
+@dp.message_handler(lambda m: m.text and m.text.lower().startswith("log "))
+async def handle_log(message: types.Message):
+    # Simple handler to update a goal based on user input, e.g. "log calories 500"
+    tokens = message.text.split()
+    if len(tokens) == 3:
+        metric, value = tokens[1], float(tokens[2])
+        user_id = message.from_user.id
+        response = await agent.acall(
+            prompt=f"Update goal: {metric} {value} for user {user_id}.",
+            # the agent may choose update_goal tool
+        )
+        await message.answer(response)
+    else:
+        await message.answer("Format: log <metric> <value>")
+
+
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True)
+
+
+
+Explanation: The code defines asynchronous functions for nutrition lookup, workout planning and goal updating. These functions are wrapped as FunctionTools and registered with the Agent. When the user sends a photo or requests a workout, the handler constructs a prompt and calls the agent. GPT‑5 decides whether to answer directly or invoke one of the registered tools. This pattern allows flexible, multi‑step reasoning while keeping domain logic in separate functions
